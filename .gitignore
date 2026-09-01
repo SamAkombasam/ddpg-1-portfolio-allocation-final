@@ -1,0 +1,11 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# PyCharm
+.idea/
+
+# Local-only documents (Word report/proposal) — not pushed to GitHub;
+# report content is included in README.md instead
+docs/
