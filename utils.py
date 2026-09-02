@@ -35,11 +35,23 @@ def annualized_volatility(values, periods_per_year=252):
     return float(np.std(r) * np.sqrt(periods_per_year))
 
 
-def total_transaction_costs(turnovers, cost_rate):
-    return float(np.sum(np.asarray(turnovers)) * cost_rate)
+def total_transaction_costs(turnovers, cost_rate, values=None, costs=None):
+    """Total transaction cost in dollars.
+
+    The environment charges cost against the portfolio's value on the day of
+    the trade, so `costs` (the per-step dollar amounts recorded in
+    env.history["cost"]) is the exact figure and is used when available.
+    The turnover x rate x initial-capital form is only a fallback: it prices
+    every trade at the starting capital and so drifts from the true cost by
+    roughly the portfolio's cumulative growth.
+    """
+    if costs is not None:
+        return float(np.sum(np.asarray(costs)))
+    base = values[0] if values is not None else 1.0
+    return float(np.sum(np.asarray(turnovers)) * cost_rate * base)
 
 
-def summarize_metrics(values, turnovers, cost_rate, label=""):
+def summarize_metrics(values, turnovers, cost_rate, label="", costs=None):
     return {
         "label": label,
         "final_value": float(values[-1]),
@@ -47,7 +59,7 @@ def summarize_metrics(values, turnovers, cost_rate, label=""):
         "sharpe_ratio": sharpe_ratio(values),
         "max_drawdown_%": max_drawdown(values) * 100,
         "annual_volatility_%": annualized_volatility(values) * 100,
-        "total_transaction_cost_$": total_transaction_costs(turnovers, cost_rate) * values[0],
+        "total_transaction_cost_$": total_transaction_costs(turnovers, cost_rate, values, costs),
     }
 
 

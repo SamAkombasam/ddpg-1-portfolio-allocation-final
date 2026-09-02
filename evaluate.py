@@ -87,8 +87,10 @@ def main(seeds=(0, 1, 2), n_eval_episodes=N_EVAL_EPISODES):
         bh_hist = buy_and_hold_baseline(PortfolioEnv, price_test, reset_seed=ep_seed, **EVAL_KWARGS)
         cost_rate = ENV_KWARGS["transaction_cost"]
 
-        m_eq = summarize_metrics(eq_hist["value"], eq_hist["turnover"], cost_rate, "Equal-Weight")
-        m_bh = summarize_metrics(bh_hist["value"], bh_hist["turnover"], cost_rate, "Buy-and-Hold")
+        m_eq = summarize_metrics(eq_hist["value"], eq_hist["turnover"], cost_rate, "Equal-Weight",
+                                 costs=eq_hist["cost"])
+        m_bh = summarize_metrics(bh_hist["value"], bh_hist["turnover"], cost_rate, "Buy-and-Hold",
+                                 costs=bh_hist["cost"])
         for m in (m_eq, m_bh):
             m["episode_index"] = ep_idx
             m["episode_seed"] = ep_seed
@@ -102,7 +104,8 @@ def main(seeds=(0, 1, 2), n_eval_episodes=N_EVAL_EPISODES):
         for ep_idx, ep_seed in enumerate(episode_seeds):
             hist = run_agent_on_episode(actor, price_test, action_dim, state_dim, ep_seed)
             cost_rate = ENV_KWARGS["transaction_cost"]
-            m = summarize_metrics(hist["value"], hist["turnover"], cost_rate, f"DDPG (seed={seed})")
+            m = summarize_metrics(hist["value"], hist["turnover"], cost_rate, f"DDPG (seed={seed})",
+                                  costs=hist["cost"])
             m["episode_index"] = ep_idx
             m["episode_seed"] = ep_seed
             m["seed"] = seed
@@ -142,7 +145,9 @@ def main(seeds=(0, 1, 2), n_eval_episodes=N_EVAL_EPISODES):
     for c in metric_cols:
         seed_level_means = ddpg_seed_means[f"{c}_mean"].values
         cross_seed_row[f"{c}_mean"] = float(np.mean(seed_level_means))
-        cross_seed_row[f"{c}_std"] = float(np.std(seed_level_means))  # std ACROSS SEEDS, n=3
+        # ddof=1 to match the sample std pandas computes for the per-seed rows above:
+        # the two are reported side by side in the report's results table.
+        cross_seed_row[f"{c}_std"] = float(np.std(seed_level_means, ddof=1))  # std ACROSS SEEDS, n=3
     summary_df = pd.concat([summary_df, pd.DataFrame([cross_seed_row])], ignore_index=True)
 
     summary_df.to_csv(os.path.join(RESULTS_DIR, "test_metrics.csv"), index=False)

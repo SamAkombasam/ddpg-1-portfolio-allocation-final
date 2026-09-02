@@ -44,7 +44,11 @@ def train_one_seed(seed, price_train, n_episodes=120, warmup_steps=500, verbose_
             if total_steps < warmup_steps:
                 action = env.action_space.sample()  # pure random warmup for buffer diversity
             else:
-                action = agent.act(obs, explore=True)
+                # clip to the action bounds: the actor can only ever output values
+                # inside them, so storing noisy out-of-bounds actions would train the
+                # critic on actions the policy can never actually take.
+                action = np.clip(agent.act(obs, explore=True),
+                                 env.action_space.low, env.action_space.high)
             next_obs, reward, done, trunc, info = env.step(action)
             agent.remember(obs, action, reward, next_obs, float(done))
             obs = next_obs

@@ -73,9 +73,20 @@ class OUNoise:
     (2016), Section 7, "Ornstein-Uhlenbeck process with theta = 0.15 and
     sigma = 0.2" (sigma is set per-project below via noise_sigma and
     annealed over training rather than held fixed; see DDPGAgent).
+
+    dt is one environment step (dt=1.0), as in the reference implementation.
+    An earlier dt=1e-2 gave a mean-reversion time constant of 1/(theta*dt)
+    ~ 667 steps, far longer than a 250-step episode: the process never
+    reached its stationary distribution, so with the per-episode reset()
+    below the realized noise grew as sigma*sqrt(n*dt) from ~0 at the start
+    of each episode and never reached the nominal sigma. Exploration was
+    therefore both much weaker than the stated schedule and non-stationary
+    within an episode. At dt=1.0 the time constant is ~7 steps and the
+    realized noise std is sigma/sqrt(1-(1-theta)^2), i.e. the annealed
+    sigma actually controls exploration as documented.
     """
 
-    def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.3, dt=1e-2, seed=0):
+    def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.3, dt=1.0, seed=0):
         self.action_dim = action_dim
         self.mu = mu
         self.theta = theta

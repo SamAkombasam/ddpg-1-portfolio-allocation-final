@@ -77,7 +77,10 @@ class PortfolioEnv(gym.Env):
 
         self.prices = price_df[price_cols].values.astype(np.float32)
         self.volumes = price_df[vol_cols].values.astype(np.float32)
-        self.log_returns = np.diff(np.log(self.prices), axis=0, prepend=self.prices[[0]])
+        # prepend the FIRST LOG-PRICE (not the raw price) so log_returns[0] == 0;
+        # prepending the raw price makes the first row log(p_0) - p_0, a value
+        # ~3 orders of magnitude outside the normal daily-return range.
+        self.log_returns = np.diff(np.log(self.prices), axis=0, prepend=np.log(self.prices[[0]]))
 
         self.n_steps_total = len(self.prices) - 1
 
@@ -111,8 +114,11 @@ class PortfolioEnv(gym.Env):
     def _get_obs(self):
         t = self.t
         w = self.window
-        start = max(0, t - w)
-        ret_window = self.log_returns[start:t]
+        # log_returns[t] = log(p_t / p_{t-1}) is known once day t's close is known,
+        # so the window ends at t INCLUSIVE. (It previously ended at t-1, silently
+        # withholding today's return while the indicators below already used p_t.)
+        start = max(0, t - w + 1)
+        ret_window = self.log_returns[start:t + 1]
         if len(ret_window) < w:
             pad = np.zeros((w - len(ret_window), self.n_assets), dtype=np.float32)
             ret_window = np.vstack([pad, ret_window]) if len(ret_window) else pad
@@ -121,7 +127,8 @@ class PortfolioEnv(gym.Env):
         returns_flat = ret_window.T.flatten()  # per-asset returns concatenated
         indicators = np.stack([sma_ratio, momentum, vol_signal], axis=1).flatten()
 
-        realized_vol = np.std(self.log_returns[start:t + 1] @ self.weights) if t > start else 0.0
+        # same window as the return features above, so both describe the same span
+        realized_vol = float(np.std(ret_window @ self.weights)) if len(ret_window) > 1 else 0.0
         cash_ratio = 0.0  # fully invested (long-only simplex); kept as a feature slot for extensibility
 
         obs = np.concatenate([
@@ -148,7 +155,8 @@ class PortfolioEnv(gym.Env):
 
         self.weights = np.ones(self.n_assets, dtype=np.float32) / self.n_assets
         self.portfolio_value = self.initial_cash
-        self.history = {"value": [self.portfolio_value], "weights": [self.weights.copy()], "turnover": []}
+        self.history = {"value": [self.portfolio_value], "weights": [self.weights.copy()],
+                        "turnover": [], "cost": []}
         return self._get_obs(), {}
 
     def step(self, action):
@@ -162,6 +170,9 @@ class PortfolioEnv(gym.Env):
         cost = self.transaction_cost * turnover
         net_growth = (1 + gross_return) * (1 - cost)
         new_value = self.portfolio_value * net_growth
+        # cost is charged against the post-drift value, so record the actual
+        # dollars paid rather than reconstructing them from initial capital later
+        cost_dollars = self.portfolio_value * (1 + gross_return) * cost
 
         reward = np.log(max(new_value, 1e-6) / max(self.portfolio_value, 1e-6))
         reward -= self.turnover_penalty * self.transaction_cost * turnover  # extra shaping term
@@ -177,6 +188,7 @@ class PortfolioEnv(gym.Env):
         self.history["value"].append(self.portfolio_value)
         self.history["weights"].append(self.weights.copy())
         self.history["turnover"].append(turnover)
+        self.history["cost"].append(cost_dollars)
 
         terminated = self.portfolio_value < self.min_value_fraction * self.initial_cash
         truncated = self.t >= self.episode_end
@@ -184,4 +196,5 @@ class PortfolioEnv(gym.Env):
         return self._get_obs(), float(reward), bool(terminated), bool(truncated), {
             "portfolio_value": self.portfolio_value,
             "turnover": turnover,
+            "cost": cost_dollars,
         }
