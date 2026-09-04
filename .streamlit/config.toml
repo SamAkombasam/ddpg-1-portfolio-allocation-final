@@ -1,0 +1,19 @@
+# Pinned so the dashboard renders identically for every group member and in the
+# demo, rather than following each machine's OS light/dark setting.
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#f9f9f7"
+secondaryBackgroundColor = "#fcfcfb"
+textColor = "#0b0b0b"
+font = "sans serif"
+
+[server]
+# Hyper-V reserves TCP 8449-8548 on some Windows machines, which swallows
+# Streamlit's default 8501 and fails with a bare "Port 8501 is not available".
+# 8600 sits outside every reserved range.
+port = 8600
+headless = true
+
+[browser]
+gatherUsageStats = false
